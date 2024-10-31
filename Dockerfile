@@ -8,25 +8,30 @@ SHELL ["bash", "-euxo", "pipefail", "-c"]
 
 RUN set -euxo pipefail >/dev/null \
 && if [[ "$DOCKER_BASE_IMAGE" != centos* ]] && [[ "$DOCKER_BASE_IMAGE" != *manylinux2014* ]]; then exit 0; fi \
-&& echo -e "[buildlogs-c7.2009.u]\nname=https://buildlogs.centos.org/c7.2009.u.x86_64/\nbaseurl=https://buildlogs.centos.org/c7.2009.u.x86_64/\nenabled=1\ngpgcheck=0\n\n[buildlogs-c7.2009.00]\nname=https://buildlogs.centos.org/c7.2009.00.x86_64/\nbaseurl=https://buildlogs.centos.org/c7.2009.00.x86_64/\nenabled=1\ngpgcheck=0" > /etc/yum.repos.d/buildlogs.repo \
-&& echo -e "[llvm-toolset]\nname=https://buildlogs.centos.org/c7-llvm-toolset-13.0.x86_64/\nbaseurl=https://buildlogs.centos.org/c7-llvm-toolset-13.0.x86_64/\nenabled=1\ngpgcheck=0" > /etc/yum.repos.d/llvm-toolset.repo \
 && sed -i "s/enabled=1/enabled=0/g" "/etc/yum/pluginconf.d/fastestmirror.conf" \
 && sed -i "s/enabled=1/enabled=0/g" "/etc/yum/pluginconf.d/ovl.conf" \
-&& yum clean all \
-&& yum -y install dnf epel-release \
-&& dnf install -y \
+&& yum clean all >/dev/null \
+&& yum install -y epel-release >/dev/null \
+&& yum remove -y \
+  devtoolset* \
+  gcc* \
+  llvm-toolset* \
+>/dev/null \
+&& yum install -y \
   bash \
   ca-certificates \
   curl \
-  gcc \
+  devtoolset-11 \
   git \
   make \
+  parallel \
   perl \
   perl-CPAN \
   sudo \
   tar \
   xz \
-&& dnf clean all \
+>/dev/null \
+&& yum clean all >/dev/null \
 && rm -rf /var/cache/yum
 
 RUN set -euxo pipefail >/dev/null \
@@ -46,9 +51,11 @@ RUN set -euxo pipefail >/dev/null \
   bash \
   ca-certificates \
   curl \
+  g++ \
   gcc \
   git \
   make \
+  parallel \
   sudo \
   tar \
   xz-utils \
@@ -56,6 +63,19 @@ RUN set -euxo pipefail >/dev/null \
 && rm -rf /var/lib/apt/lists/* \
 && apt-get clean autoclean >/dev/null \
 && apt-get autoremove --yes >/dev/null
+
+ENV CCACHE_DIR="/cache/ccache"
+ENV CCACHE_NOCOMPRESS="1"
+ENV CCACHE_MAXSIZE="50G"
+RUN set -euxo pipefail >/dev/null \
+&& curl -fsSL "https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz" | tar --strip-components=1 -C "/usr/bin" -xJ "ccache-4.10.2-linux-x86_64/ccache" \
+&& which ccache \
+&& ccache --version
+
+RUN set -euxo pipefail >/dev/null \
+&& curl -fsSL "https://github.com/binarylandia/build_zlib/releases/download/zlib-1.3.1-static-20241031112952/zlib-1.3.1-static-20241031112952.tar.xz" | tar -C "/usr" -xJ \
+&& ls /usr/include/zlib.h \
+&& ls /usr/lib/libz.a
 
 ARG USER=user
 ARG GROUP=user
@@ -83,3 +103,5 @@ RUN set -euxo pipefail >/dev/null \
 
 
 USER ${USER}
+
+ENTRYPOINT ["scl", "enable", "devtoolset-11", "--"]
